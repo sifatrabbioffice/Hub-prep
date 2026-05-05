@@ -1,0 +1,140 @@
+name: GameHub Production Build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build GameHub IPA
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Generate Source Files and Plist
+        run: |
+          mkdir -p GameHub
+          
+          # 1. Info.plist Setup
+          cat <<'EOF' > GameHub/Info.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key>
+            <string>GameHub</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.gamehub.emulator.official</string>
+            <key>CFBundleName</key>
+            <string>GameHub</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0</string>
+            <key>CFBundleVersion</key>
+            <string>1</string>
+            <key>LSRequiresIPhoneOS</key>
+            <true/>
+            <key>UIFileSharingEnabled</key>
+            <true/>
+            <key>LSSupportsOpeningDocumentsInPlace</key>
+            <true/>
+            <key>UILaunchStoryboardName</key>
+            <string>LaunchScreen</string>
+            <key>UISupportedInterfaceOrientations</key>
+            <array>
+              <string>UIInterfaceOrientationLandscapeLeft</string>
+              <string>UIInterfaceOrientationLandscapeRight</string>
+            </array>
+          </dict>
+          </plist>
+          EOF
+
+          # 2. LaunchScreen.swift
+          cat <<'EOF' > GameHub/LaunchScreen.swift
+          import UIKit
+          class LaunchScreen: UIViewController {}
+          EOF
+
+          # 3. GameHub App Code (Updated UI)
+          cat <<'EOF' > GameHub/App.swift
+          import SwiftUI
+
+          @main
+          struct GameHubApp: App {
+              var body: some Scene {
+                  WindowGroup {
+                      MainView()
+                  }
+              }
+          }
+
+          struct MainView: View {
+              var body: some View {
+                  ZStack {
+                      Color.black.ignoresSafeArea()
+                      VStack(spacing: 20) {
+                          Text("GAMEHUB")
+                              .font(.system(size: 50, weight: .black))
+                              .foregroundColor(.blue)
+                          
+                          Text("PC • XBOX • PLAYSTATION")
+                              .font(.headline)
+                              .foregroundColor(.white)
+                          
+                          VStack(alignment: .leading, spacing: 10) {
+                              Label("Cloud Gaming Ready", systemImage: "icloud.fill")
+                              Label("90 FPS Supported", systemImage: "bolt.fill")
+                              Label("System Operational", systemImage: "checkmark.circle.fill")
+                          }
+                          .foregroundColor(.green)
+                          
+                          Spacer()
+                          
+                          Text("Official Institution Build")
+                              .font(.caption)
+                              .foregroundColor(.gray)
+                      }
+                      .padding()
+                  }
+              }
+          }
+          EOF
+
+          # 4. Generate Project
+          xcodegen generate
+
+      - name: Build Archive
+        run: |
+          xcodebuild archive \
+            -project GameHub.xcodeproj \
+            -scheme GameHub \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath build/GameHub.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Export IPA
+        run: |
+          mkdir -p build/Payload
+          cp -r build/GameHub.xcarchive/Products/Applications/*.app build/Payload/
+          cd build
+          zip -qr GameHub_Official.ipa Payload
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GameHub-IPA
+          path: build/GameHub_Official.ipa
